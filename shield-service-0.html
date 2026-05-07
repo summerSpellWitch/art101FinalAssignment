@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" data-page-id="2695">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shield Service 0</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .shield-action-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding-top: 14px;
+        margin-top: 4px;
+        border-top: 1px solid rgba(134, 255, 154, 0.14);
+      }
+
+      .shield-btn {
+        font: inherit;
+        color: var(--fg);
+        background: rgba(134, 255, 154, 0.08);
+        border: 1px solid rgba(134, 255, 154, 0.4);
+        border-radius: 8px;
+        padding: 10px 18px;
+        cursor: pointer;
+        text-shadow: 0 0 10px var(--glow);
+        box-shadow: 0 0 12px rgba(134, 255, 154, 0.12);
+      }
+
+      .shield-btn:hover:not(:disabled) {
+        background: rgba(134, 255, 154, 0.14);
+        border-color: rgba(134, 255, 154, 0.7);
+        box-shadow: 0 0 18px rgba(134, 255, 154, 0.2);
+      }
+
+      .shield-btn:disabled {
+        cursor: default;
+        opacity: 0.55;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="crt" aria-label="Shield Service 0">
+      <div class="chrome">
+        <div class="status">
+          <span class="lamp" aria-hidden="true"></span>
+          <span class="label">GEHENNAOS :: SHIELD SERVICE 0</span>
+        </div>
+
+        <section class="screen" aria-label="Shield Service 0 screen">
+          <div id="output" class="output" aria-live="polite"></div>
+          <div class="shield-action-row">
+            <button type="button" id="shieldEnableBtn" class="shield-btn">Enable shield service</button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="scanOutlineGlobal" class="scanOutlineGlobal" aria-hidden="true"></div>
+
+    <script src="./ws-client.js"></script>
+    <script src="./access-guard.js"></script>
+    <script>
+      const outputEl = document.getElementById("output");
+      const outlineEl = document.getElementById("scanOutlineGlobal");
+      const enableBtn = document.getElementById("shieldEnableBtn");
+
+      function addLine(text, { dim = false } = {}) {
+        const line = document.createElement("div");
+        line.className = dim ? "line dim" : "line";
+        line.textContent = text;
+        outputEl.appendChild(line);
+      }
+
+      function placeOutline(state) {
+        const enabled = Boolean(state?.enabled);
+        outlineEl.classList.toggle("on", enabled);
+        if (!enabled) return;
+
+        const w = Math.round(state?.wPx ?? 300);
+        const h = Math.round(state?.hPx ?? 200);
+        const left = Math.round(((state.x ?? 0.5) * window.innerWidth) - w / 2);
+        const top = Math.round(((state.y ?? 0.5) * window.innerHeight) - h / 2);
+        outlineEl.style.left = `${left}px`;
+        outlineEl.style.top = `${top}px`;
+        outlineEl.style.width = `${w}px`;
+        outlineEl.style.height = `${h}px`;
+      }
+
+      window.GEHENNA_WS?.on("ws:status", ({ connected }) => {
+        addLine(connected ? "GEHENNA-NET link established." : "GEHENNA-NET link lost.", { dim: true });
+      });
+
+      window.GEHENNA_WS?.on("scan:state", ({ state }) => {
+        placeOutline(state);
+      });
+
+      function setShieldUi(enabled) {
+        if (enabled) {
+          enableBtn.disabled = true;
+          enableBtn.textContent = "Shield service enabled";
+        } else {
+          enableBtn.disabled = false;
+          enableBtn.textContent = "Enable shield service";
+        }
+      }
+
+      window.GEHENNA_WS?.on("shield:state", ({ enabled }) => {
+        setShieldUi(Boolean(enabled));
+      });
+
+      addLine(
+        "When this service is enabled it blocks Obfuscation Service 1 ran by the Federal Bureau of Obfuscation. Some Page IDs should be unscrambled when pinged and lower level consoles should now have access to a kill and revive command. Click the button to enable this service.",
+      );
+
+      enableBtn?.addEventListener("click", () => {
+        if (enableBtn.disabled) return;
+        addLine("Shield service: ENABLED", { dim: true });
+        window.GEHENNA_WS?.send?.("shield:set", { enabled: true });
+        setShieldUi(true);
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-page-id="0000">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GehennaOS Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="crt" aria-label="Command console">
+      <div class="chrome">
+        <div class="status">
+          <span class="lamp" aria-hidden="true"></span>
+          <span class="label">GEHENNAOS :: CONSOLE</span>
+        </div>
+
+        <section class="screen" aria-label="Console screen">
+          <div id="scanRect" class="scanRect" aria-hidden="true"></div>
+          <div id="output" class="output" aria-live="polite" aria-relevant="additions"></div>
+
+          <form id="commandForm" class="inputRow" autocomplete="off">
+            <span class="prompt" aria-hidden="true">C:\&gt;</span>
+            <label class="srOnly" for="commandInput">Command</label>
+            <input
+              id="commandInput"
+              class="commandInput"
+              type="text"
+              inputmode="text"
+              spellcheck="false"
+              autocapitalize="off"
+              autocomplete="off"
+              autofocus
+            />
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <script src="./ws-client.js"></script>
+    <script src="./access-guard.js"></script>
+    <script src="./script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en" data-page-id="6793">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Link Maze</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .link-maze-screen {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .link-maze-grid {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        gap: 6px;
+        padding: 4px 0 0;
+        opacity: 1;
+        transition: opacity 0.55s ease;
+      }
+
+      .link-maze-grid.is-fading-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .link-maze-grid.is-fading-in-start {
+        opacity: 0;
+        transition: none;
+      }
+
+      .link-maze-cell {
+        position: relative;
+        min-height: 0;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        border: 1px solid rgba(134, 255, 154, 0.28);
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.35);
+        box-shadow: inset 0 0 12px rgba(134, 255, 154, 0.06);
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease,
+          background 0.15s ease;
+        cursor: default;
+        overflow: hidden;
+      }
+
+      .link-maze-cell:hover {
+        border-color: rgba(134, 255, 154, 0.75);
+        box-shadow:
+          inset 0 0 16px rgba(134, 255, 154, 0.12),
+          0 0 18px rgba(134, 255, 154, 0.22);
+        background: rgba(134, 255, 154, 0.07);
+      }
+
+      .link-maze-cell.is-scan-reveal {
+        cursor: pointer;
+        border-color: rgba(255, 228, 106, 0.95);
+        box-shadow:
+          inset 0 0 18px rgba(255, 228, 106, 0.15),
+          0 0 22px rgba(255, 228, 106, 0.35);
+        background: rgba(255, 228, 106, 0.08);
+      }
+
+      .link-maze-cell.is-secret-12 {
+        pointer-events: none;
+        cursor: default;
+      }
+
+      .link-maze-cell.is-red-hint {
+        border-color: rgba(255, 120, 120, 0.95);
+        box-shadow:
+          inset 0 0 18px rgba(255, 100, 100, 0.18),
+          0 0 22px rgba(255, 90, 90, 0.38);
+        background: rgba(255, 60, 60, 0.1);
+      }
+
+      .link-maze-cell.is-red-hint:hover {
+        border-color: rgba(255, 120, 120, 0.95);
+        box-shadow:
+          inset 0 0 18px rgba(255, 100, 100, 0.18),
+          0 0 22px rgba(255, 90, 90, 0.38);
+        background: rgba(255, 60, 60, 0.1);
+      }
+
+      .link-maze-cell-text {
+        font-size: clamp(7px, 0.95vw, 11px);
+        line-height: 1.15;
+        text-align: center;
+        color: var(--fg-dim);
+        text-shadow: 0 0 8px var(--glow);
+        word-break: break-all;
+        user-select: none;
+      }
+
+      .link-maze-cell:hover .link-maze-cell-text {
+        color: var(--fg);
+      }
+
+      .link-maze-cell.is-scan-reveal .link-maze-cell-text {
+        color: #ffe46a;
+        text-shadow: 0 0 10px rgba(255, 228, 106, 0.55);
+      }
+
+      .link-maze-cell.is-red-hint .link-maze-cell-text {
+        color: #ff9a9a;
+        text-shadow: 0 0 12px rgba(255, 120, 120, 0.55);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="crt" aria-label="Link Maze">
+      <div class="chrome">
+        <div id="linkMazeStatusBar" class="status">
+          <span class="lamp" aria-hidden="true"></span>
+          <span id="linkMazeStatusLabel" class="label">GEHENNAOS :: LINK MAZE</span>
+        </div>
+
+        <section class="screen link-maze-screen" aria-label="Link Maze screen">
+          <div id="linkMazeGrid" class="link-maze-grid" aria-hidden="true"></div>
+        </section>
+      </div>
+    </main>
+
+    <div id="scanOutlineGlobal" class="scanOutlineGlobal" aria-hidden="true"></div>
+
+    <script src="./ws-client.js"></script>
+    <script src="./access-guard.js"></script>
+    <script>
+      const outlineEl = document.getElementById("scanOutlineGlobal");
+      const gridEl = document.getElementById("linkMazeGrid");
+      const statusBarEl = document.getElementById("linkMazeStatusBar");
+      const statusLabelEl = document.getElementById("linkMazeStatusLabel");
+
+      const INITIAL_TEXT = "theWayForward?";
+      const REVEAL_TEXT = "The way forward";
+      const RED_HINT_TEXT = "Check the header";
+      const CHARSET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+      const HEADER_DEFAULT = "GEHENNAOS :: LINK MAZE";
+      const HEADER_SCAN_REVEAL =
+        "GEHENNAOS :: LINK MAZE :: SHIELD SERVICE PASSWORD = 4189";
+
+      let scanState = { enabled: false, x: 0.5, y: 0.5, wPx: 300, hPx: 200 };
+      let gridSize = 10;
+      let secretIndex = 0;
+      let isTransitioning = false;
+
+      const cells = [];
+
+      function randomScramble(len) {
+        let s = "";
+        for (let i = 0; i < len; i++) {
+          s += CHARSET[Math.floor(Math.random() * CHARSET.length)];
+        }
+        return s;
+      }
+
+      function scanViewportRect() {
+        if (!scanState.enabled) return null;
+        const w = Math.round(scanState.wPx ?? 300);
+        const h = Math.round(scanState.hPx ?? 200);
+        const left = Math.round(((scanState.x ?? 0.5) * window.innerWidth) - w / 2);
+        const top = Math.round(((scanState.y ?? 0.5) * window.innerHeight) - h / 2);
+        return { left, top, right: left + w, bottom: top + h };
+      }
+
+      function rectsIntersect(a, b) {
+        return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      }
+
+      function clearAllCellTimers() {
+        for (const c of cells) {
+          if (c.tickId != null) {
+            clearInterval(c.tickId);
+            c.tickId = null;
+          }
+        }
+      }
+
+      function placeOutline(state) {
+        const next = state ?? {};
+        scanState = {
+          ...scanState,
+          enabled: Boolean(next.enabled),
+          x: Number.isFinite(next.x) ? next.x : scanState.x,
+          y: Number.isFinite(next.y) ? next.y : scanState.y,
+          wPx: Number.isFinite(next.wPx) ? next.wPx : scanState.wPx,
+          hPx: Number.isFinite(next.hPx) ? next.hPx : scanState.hPx,
+        };
+        outlineEl.classList.toggle("on", scanState.enabled);
+        if (!scanState.enabled) return;
+
+        const w = Math.round(scanState.wPx ?? 300);
+        const h = Math.round(scanState.hPx ?? 200);
+        const left = Math.round(((scanState.x ?? 0.5) * window.innerWidth) - w / 2);
+        const top = Math.round(((scanState.y ?? 0.5) * window.innerHeight) - h / 2);
+        outlineEl.style.left = `${left}px`;
+        outlineEl.style.top = `${top}px`;
+        outlineEl.style.width = `${w}px`;
+        outlineEl.style.height = `${h}px`;
+      }
+
+      function updateHeaderScanOverlap() {
+        if (gridSize !== 12) {
+          statusLabelEl.textContent = HEADER_DEFAULT;
+          return;
+        }
+
+        const scanR = scanViewportRect();
+        if (!scanR || !statusBarEl) {
+          statusLabelEl.textContent = HEADER_DEFAULT;
+          return;
+        }
+
+        const br = statusBarEl.getBoundingClientRect();
+        const barR = { left: br.left, top: br.top, right: br.right, bottom: br.bottom };
+        const overlap = rectsIntersect(scanR, barR);
+        statusLabelEl.textContent = overlap ? HEADER_SCAN_REVEAL : HEADER_DEFAULT;
+      }
+
+      function updateScanOverlap() {
+        if (isTransitioning) return;
+
+        updateHeaderScanOverlap();
+
+        const scanR = scanViewportRect();
+        const secretCell = cells[secretIndex];
+        if (!secretCell) return;
+
+        let overlap = false;
+        if (scanR) {
+          const br = secretCell.el.getBoundingClientRect();
+          const cellR = { left: br.left, top: br.top, right: br.right, bottom: br.bottom };
+          overlap = rectsIntersect(scanR, cellR);
+        }
+
+        if (gridSize === 12) {
+          if (overlap && !secretCell.revealedByScan) {
+            secretCell.revealedByScan = true;
+            if (secretCell.tickId != null) {
+              clearInterval(secretCell.tickId);
+              secretCell.tickId = null;
+            }
+            secretCell.textEl.textContent = RED_HINT_TEXT;
+            secretCell.el.classList.add("is-red-hint");
+          } else if (!overlap && secretCell.revealedByScan) {
+            secretCell.revealedByScan = false;
+            secretCell.el.classList.remove("is-red-hint");
+            secretCell.textEl.textContent = randomScramble(INITIAL_TEXT.length);
+            if (secretCell.tickId == null) {
+              secretCell.tickId = setInterval(() => {
+                if (secretCell.revealedByScan) return;
+                secretCell.textEl.textContent = randomScramble(INITIAL_TEXT.length);
+              }, 110);
+            }
+          }
+          return;
+        }
+
+        if (overlap && !secretCell.revealedByScan) {
+          secretCell.revealedByScan = true;
+          if (secretCell.tickId != null) {
+            clearInterval(secretCell.tickId);
+            secretCell.tickId = null;
+          }
+          secretCell.textEl.textContent = REVEAL_TEXT;
+          secretCell.el.classList.add("is-scan-reveal");
+        } else if (!overlap && secretCell.revealedByScan) {
+          secretCell.revealedByScan = false;
+          secretCell.el.classList.remove("is-scan-reveal");
+          secretCell.textEl.textContent = randomScramble(INITIAL_TEXT.length);
+          if (secretCell.tickId == null) {
+            secretCell.tickId = setInterval(() => {
+              if (secretCell.revealedByScan) return;
+              secretCell.textEl.textContent = randomScramble(INITIAL_TEXT.length);
+            }, 110);
+          }
+        }
+      }
+
+      function buildGrid(size) {
+        clearAllCellTimers();
+        gridEl.innerHTML = "";
+        cells.length = 0;
+
+        gridSize = size;
+        secretIndex = Math.floor(Math.random() * size * size);
+
+        gridEl.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+        gridEl.style.gridTemplateRows = `repeat(${size}, 1fr)`;
+
+        const total = size * size;
+        const is12 = size === 12;
+
+        for (let i = 0; i < total; i++) {
+          const cell = document.createElement("div");
+          cell.className = "link-maze-cell";
+          if (is12 && i === secretIndex) cell.classList.add("is-secret-12");
+          const span = document.createElement("span");
+          span.className = "link-maze-cell-text";
+          span.textContent = INITIAL_TEXT;
+
+          cell.appendChild(span);
+          gridEl.appendChild(cell);
+
+          const entry = { el: cell, textEl: span, tickId: null, revealedByScan: false };
+          cells.push(entry);
+
+          const startScramble = () => {
+            if (entry.tickId != null) return;
+            entry.tickId = setInterval(() => {
+              if (i === secretIndex && entry.revealedByScan) return;
+              entry.textEl.textContent = randomScramble(INITIAL_TEXT.length);
+            }, 110);
+          };
+
+          requestAnimationFrame(() => {
+            if (i === secretIndex && entry.revealedByScan) return;
+            startScramble();
+          });
+        }
+
+        if (!is12) {
+          statusLabelEl.textContent = HEADER_DEFAULT;
+        }
+      }
+
+      function finishFadeIn() {
+        gridEl.classList.remove("is-fading-in-start");
+        isTransitioning = false;
+        updateScanOverlap();
+      }
+
+      function runGridTransition(nextSize) {
+        if (isTransitioning) return;
+        isTransitioning = true;
+        clearAllCellTimers();
+
+        gridEl.classList.remove("is-fading-in-start");
+        gridEl.classList.add("is-fading-out");
+
+        let done = false;
+        function completeFadeOut() {
+          if (done) return;
+          done = true;
+          clearTimeout(fallbackTimer);
+
+          buildGrid(nextSize);
+          gridEl.classList.remove("is-fading-out");
+          gridEl.classList.add("is-fading-in-start");
+
+          requestAnimationFrame(() => {
+            requestAnimationFrame(finishFadeIn);
+          });
+        }
+
+        function afterFadeOut(e) {
+          if (e.target !== gridEl) return;
+          if (e.propertyName !== "opacity") return;
+          completeFadeOut();
+        }
+
+        const fallbackTimer = window.setTimeout(completeFadeOut, 700);
+
+        gridEl.addEventListener("transitionend", afterFadeOut, { once: true });
+      }
+
+      gridEl.addEventListener("click", (e) => {
+        const cellEl = e.target.closest(".link-maze-cell");
+        if (!cellEl || !cellEl.classList.contains("is-scan-reveal")) return;
+        if (gridSize === 10) runGridTransition(8);
+        else if (gridSize === 8) runGridTransition(12);
+      });
+
+      let rafId = null;
+      function loop() {
+        updateScanOverlap();
+        rafId = requestAnimationFrame(loop);
+      }
+
+      buildGrid(10);
+      rafId = requestAnimationFrame(loop);
+      window.addEventListener("resize", () => updateScanOverlap());
+
+      window.GEHENNA_WS?.on("scan:state", ({ state }) => {
+        placeOutline(state);
+        updateScanOverlap();
+      });
+    </script>
+  </body>
+</html>

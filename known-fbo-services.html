@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en" data-page-id="8875">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Known FBO Services</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .known-screen {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .known-grid {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        padding: 4px 0 0;
+        overflow: hidden;
+        align-items: stretch;
+      }
+
+      .known-col {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        gap: 2px;
+      }
+
+      .known-row {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        font-size: clamp(7px, 0.85vw, 10px);
+        line-height: 1.15;
+        color: var(--fg-dim);
+        text-shadow: 0 0 6px var(--glow);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+          monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 0 2px;
+        transition:
+          color 0.12s ease,
+          text-shadow 0.12s ease;
+      }
+
+      .known-row.is-scan-reveal {
+        color: #ffe46a;
+        text-shadow: 0 0 10px rgba(255, 228, 106, 0.55), 0 0 20px rgba(255, 228, 106, 0.25);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="crt" aria-label="Known FBO Services">
+      <div class="chrome">
+        <div class="status">
+          <span class="lamp" aria-hidden="true"></span>
+          <span class="label">GEHENNAOS :: KNOWN FBO SERVICES</span>
+        </div>
+
+        <section class="screen known-screen" aria-label="Known FBO Services contents">
+          <div id="knownGrid" class="known-grid"></div>
+        </section>
+      </div>
+    </main>
+
+    <div id="scanOutlineGlobal" class="scanOutlineGlobal" aria-hidden="true"></div>
+
+    <script src="./ws-client.js"></script>
+    <script src="./access-guard.js"></script>
+    <script>
+      const outlineEl = document.getElementById("scanOutlineGlobal");
+      const gridEl = document.getElementById("knownGrid");
+
+      const START_TEXT = "FBO Services";
+      const ROWS = 40;
+      const COLS = 3;
+      const CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz =|:";
+
+      const REVEALS = [
+        "FBO Surveillance Hub ID = 09EE",
+        "FBO Critical Internal Servers ID = 1D9D",
+        "Obfuscation Service 0 ID = 12AD",
+      ];
+
+      let scanState = { enabled: false, x: 0.5, y: 0.5, wPx: 300, hPx: 200 };
+
+      /** @type {{ el: HTMLElement, revealText: string, tickId: ReturnType<typeof setInterval> | null, revealedByScan: boolean }[]} */
+      const secretRows = [];
+
+      function randomScramble(len) {
+        let s = "";
+        for (let i = 0; i < len; i++) s += CHARSET[Math.floor(Math.random() * CHARSET.length)];
+        return s;
+      }
+
+      function scanViewportRect() {
+        if (!scanState.enabled) return null;
+        const w = Math.round(scanState.wPx ?? 300);
+        const h = Math.round(scanState.hPx ?? 200);
+        const left = Math.round(((scanState.x ?? 0.5) * window.innerWidth) - w / 2);
+        const top = Math.round(((scanState.y ?? 0.5) * window.innerHeight) - h / 2);
+        return { left, top, right: left + w, bottom: top + h };
+      }
+
+      function rectsIntersect(a, b) {
+        return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      }
+
+      function placeOutline(state) {
+        const next = state ?? {};
+        scanState = {
+          ...scanState,
+          enabled: Boolean(next.enabled),
+          x: Number.isFinite(next.x) ? next.x : scanState.x,
+          y: Number.isFinite(next.y) ? next.y : scanState.y,
+          wPx: Number.isFinite(next.wPx) ? next.wPx : scanState.wPx,
+          hPx: Number.isFinite(next.hPx) ? next.hPx : scanState.hPx,
+        };
+        outlineEl.classList.toggle("on", scanState.enabled);
+        if (!scanState.enabled) return;
+
+        const w = Math.round(scanState.wPx ?? 300);
+        const h = Math.round(scanState.hPx ?? 200);
+        const left = Math.round(((scanState.x ?? 0.5) * window.innerWidth) - w / 2);
+        const top = Math.round(((scanState.y ?? 0.5) * window.innerHeight) - h / 2);
+        outlineEl.style.left = `${left}px`;
+        outlineEl.style.top = `${top}px`;
+        outlineEl.style.width = `${w}px`;
+        outlineEl.style.height = `${h}px`;
+      }
+
+      function build() {
+        gridEl.innerHTML = "";
+        secretRows.length = 0;
+
+        // Random row index per column
+        const secretRowIndexByCol = Array.from({ length: COLS }, () => Math.floor(Math.random() * ROWS));
+
+        // Shuffle reveal texts so each column gets one
+        const revealTexts = [...REVEALS];
+        for (let i = revealTexts.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [revealTexts[i], revealTexts[j]] = [revealTexts[j], revealTexts[i]];
+        }
+
+        for (let c = 0; c < COLS; c++) {
+          const colEl = document.createElement("div");
+          colEl.className = "known-col";
+
+          for (let r = 0; r < ROWS; r++) {
+            const rowEl = document.createElement("div");
+            rowEl.className = "known-row";
+            rowEl.textContent = START_TEXT;
+
+            const isSecret = r === secretRowIndexByCol[c];
+            const lineLen = Math.max(START_TEXT.length, 26);
+
+            if (isSecret) {
+              const entry = { el: rowEl, revealText: revealTexts[c], tickId: null, revealedByScan: false };
+              secretRows.push(entry);
+              queueMicrotask(() => {
+                rowEl.textContent = randomScramble(lineLen);
+                entry.tickId = setInterval(() => {
+                  if (entry.revealedByScan) return;
+                  rowEl.textContent = randomScramble(lineLen);
+                }, 45);
+              });
+            } else {
+              queueMicrotask(() => {
+                rowEl.textContent = randomScramble(lineLen);
+                setInterval(() => {
+                  rowEl.textContent = randomScramble(lineLen);
+                }, 45);
+              });
+            }
+
+            colEl.appendChild(rowEl);
+          }
+
+          gridEl.appendChild(colEl);
+        }
+      }
+
+      function updateScanOverlap() {
+        const scanR = scanViewportRect();
+        for (const entry of secretRows) {
+          let overlap = false;
+          if (scanR) {
+            const br = entry.el.getBoundingClientRect();
+            const rowR = { left: br.left, top: br.top, right: br.right, bottom: br.bottom };
+            overlap = rectsIntersect(scanR, rowR);
+          }
+
+          if (overlap && !entry.revealedByScan) {
+            entry.revealedByScan = true;
+            if (entry.tickId != null) {
+              clearInterval(entry.tickId);
+              entry.tickId = null;
+            }
+            entry.el.textContent = entry.revealText;
+            entry.el.classList.add("is-scan-reveal");
+          } else if (!overlap && entry.revealedByScan) {
+            entry.revealedByScan = false;
+            entry.el.classList.remove("is-scan-reveal");
+            const lineLen = Math.max(START_TEXT.length, 26);
+            entry.el.textContent = randomScramble(lineLen);
+            if (entry.tickId == null) {
+              entry.tickId = setInterval(() => {
+                if (entry.revealedByScan) return;
+                entry.el.textContent = randomScramble(lineLen);
+              }, 45);
+            }
+          }
+        }
+      }
+
+      function loop() {
+        updateScanOverlap();
+        requestAnimationFrame(loop);
+      }
+
+      build();
+      requestAnimationFrame(loop);
+      window.addEventListener("resize", () => updateScanOverlap());
+      window.GEHENNA_WS?.on("scan:state", ({ state }) => {
+        placeOutline(state);
+        updateScanOverlap();
+      });
+    </script>
+  </body>
+</html>
+

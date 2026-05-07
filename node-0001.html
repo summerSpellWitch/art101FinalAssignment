@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" data-page-id="0001">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GehennaOS Node 0001</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="crt" aria-label="GehennaOS node page">
+      <div class="chrome">
+        <div class="status">
+          <span class="lamp" aria-hidden="true"></span>
+          <span class="label">GEHENNAOS :: NODE 0001</span>
+        </div>
+
+        <section class="screen" aria-label="Node screen">
+          <div id="output" class="output" aria-live="polite"></div>
+        </section>
+      </div>
+    </main>
+
+    <div id="scanOutlineGlobal" class="scanOutlineGlobal" aria-hidden="true"></div>
+
+    <script src="./ws-client.js"></script>
+    <script src="./access-guard.js"></script>
+    <script>
+      const outputEl = document.getElementById("output");
+      const outlineEl = document.getElementById("scanOutlineGlobal");
+
+      function addLine(text, { dim = false } = {}) {
+        const line = document.createElement("div");
+        line.className = dim ? "line dim" : "line";
+        line.textContent = text;
+        outputEl.appendChild(line);
+      }
+
+      function placeOutline(state) {
+        const enabled = Boolean(state?.enabled);
+        outlineEl.classList.toggle("on", enabled);
+        if (!enabled) return;
+
+        const w = Math.round(state?.wPx ?? 300);
+        const h = Math.round(state?.hPx ?? 200);
+        const left = Math.round(((state.x ?? 0.5) * window.innerWidth) - w / 2);
+        const top = Math.round(((state.y ?? 0.5) * window.innerHeight) - h / 2);
+        outlineEl.style.left = `${left}px`;
+        outlineEl.style.top = `${top}px`;
+        outlineEl.style.width = `${w}px`;
+        outlineEl.style.height = `${h}px`;
+      }
+
+      window.GEHENNA_WS?.on("ws:status", ({ connected }) => {
+        addLine(connected ? "GEHENNA-NET link established." : "GEHENNA-NET link lost.", { dim: true });
+      });
+
+      window.GEHENNA_WS?.on("scan:state", ({ state }) => {
+        placeOutline(state);
+      });
+
+      window.addEventListener("resize", () => {
+        // Will be corrected on next scan:state broadcast; keep hidden otherwise.
+      });
+
+      addLine("Node online.", { dim: true });
+      addLine("Waiting for SCAN overlay broadcast...", { dim: true });
+    </script>
+  </body>
+</html>
+

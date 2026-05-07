@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-page-id="5462">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Obfuscation Service 1</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="crt" aria-label="Obfuscation Service 1">
+      <div class="chrome">
+        <div class="status">
+          <span class="lamp" aria-hidden="true"></span>
+          <span class="label">GEHENNAOS :: OBFUSCATION SERVICE 1</span>
+        </div>
+
+        <section class="screen" aria-label="Obfuscation Service 1 screen">
+          <div id="output" class="output" aria-live="polite"></div>
+        </section>
+      </div>
+    </main>
+
+    <div id="scanOutlineGlobal" class="scanOutlineGlobal" aria-hidden="true"></div>
+
+    <script src="./ws-client.js"></script>
+    <script src="./access-guard.js"></script>
+    <script>
+      const outputEl = document.getElementById("output");
+      const outlineEl = document.getElementById("scanOutlineGlobal");
+
+      function addLine(text, { dim = false } = {}) {
+        const line = document.createElement("div");
+        line.className = dim ? "line dim" : "line";
+        line.textContent = text;
+        outputEl.appendChild(line);
+      }
+
+      function placeOutline(state) {
+        const enabled = Boolean(state?.enabled);
+        outlineEl.classList.toggle("on", enabled);
+        if (!enabled) return;
+
+        const w = Math.round(state?.wPx ?? 300);
+        const h = Math.round(state?.hPx ?? 200);
+        const left = Math.round(((state.x ?? 0.5) * window.innerWidth) - w / 2);
+        const top = Math.round(((state.y ?? 0.5) * window.innerHeight) - h / 2);
+        outlineEl.style.left = `${left}px`;
+        outlineEl.style.top = `${top}px`;
+        outlineEl.style.width = `${w}px`;
+        outlineEl.style.height = `${h}px`;
+      }
+
+      window.GEHENNA_WS?.on("scan:state", ({ state }) => placeOutline(state));
+
+      addLine(
+        "An obfuscation service ran and maintained by the Federal Bureau of Obfuscation that blocks the following commands and pages from unauthorized consoles:",
+      );
+      addLine("");
+      addLine("Commands: kill, revive");
+      addLine("");
+      addLine("Pages: Password Vault, Deciphering Service, Known FBO Services");
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en" data-page-id="3240">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blackout</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: #000;
+        overflow: hidden;
+      }
+
+      #scanFlashlight {
+        position: fixed;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+        display: none;
+        z-index: 10;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02) 55%, rgba(0, 0, 0, 0) 70%);
+        box-shadow: 0 0 40px rgba(255, 255, 255, 0.06);
+      }
+
+      #scanFlashlight.on {
+        display: block;
+      }
+
+      #shieldText {
+        position: fixed;
+        left: 20px;
+        top: 20px;
+        color: rgba(255, 255, 255, 0.95);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 20px;
+        letter-spacing: 0.04em;
+        text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        opacity: 0;
+        transition: opacity 90ms linear;
+        z-index: 5;
+        user-select: none;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="shieldText" aria-hidden="true">Shield Service ID = 2695</div>
+    <div id="scanFlashlight" aria-hidden="true"></div>
+
+    <script src="./ws-client.js"></script>
+    <script src="./access-guard.js"></script>
+    <script>
+      const flashlightEl = document.getElementById("scanFlashlight");
+      const shieldEl = document.getElementById("shieldText");
+
+      let scan = { enabled: false, x: 0.5, y: 0.5, wPx: 300, hPx: 200 };
+
+      function rectFromScan(state) {
+        const w = Math.round(state?.wPx ?? 300);
+        const h = Math.round(state?.hPx ?? 200);
+        const left = Math.round(((state?.x ?? 0.5) * window.innerWidth) - w / 2);
+        const top = Math.round(((state?.y ?? 0.5) * window.innerHeight) - h / 2);
+        return { left, top, w, h, right: left + w, bottom: top + h };
+      }
+
+      function placeFlashlight(state) {
+        const enabled = Boolean(state?.enabled);
+        flashlightEl.classList.toggle("on", enabled);
+        scan = { ...scan, ...(state ?? {}) };
+        if (!enabled) return;
+
+        const r = rectFromScan(scan);
+        flashlightEl.style.left = `${r.left}px`;
+        flashlightEl.style.top = `${r.top}px`;
+        flashlightEl.style.width = `${r.w}px`;
+        flashlightEl.style.height = `${r.h}px`;
+      }
+
+      function randomDirection() {
+        const a = Math.random() * Math.PI * 2;
+        return { vx: Math.cos(a), vy: Math.sin(a) };
+      }
+
+      let pos = { x: 40, y: 40 };
+      let vel = randomDirection();
+      const speedPxPerSec = 18; // slow drift
+      let lastT = performance.now();
+
+      function tick(now) {
+        const dt = Math.min(0.05, (now - lastT) / 1000);
+        lastT = now;
+
+        const w = shieldEl.offsetWidth || 220;
+        const h = shieldEl.offsetHeight || 24;
+
+        pos.x += vel.vx * speedPxPerSec * dt;
+        pos.y += vel.vy * speedPxPerSec * dt;
+
+        let hit = false;
+        if (pos.x <= 0) {
+          pos.x = 0;
+          hit = true;
+        }
+        if (pos.y <= 0) {
+          pos.y = 0;
+          hit = true;
+        }
+        if (pos.x + w >= window.innerWidth) {
+          pos.x = window.innerWidth - w;
+          hit = true;
+        }
+        if (pos.y + h >= window.innerHeight) {
+          pos.y = window.innerHeight - h;
+          hit = true;
+        }
+        if (hit) vel = randomDirection();
+
+        shieldEl.style.left = `${Math.round(pos.x)}px`;
+        shieldEl.style.top = `${Math.round(pos.y)}px`;
+
+        if (!scan.enabled) {
+          shieldEl.style.opacity = "0";
+        } else {
+          const sr = rectFromScan(scan);
+          const cx = pos.x + w / 2;
+          const cy = pos.y + h / 2;
+          const visible = cx >= sr.left && cx <= sr.right && cy >= sr.top && cy <= sr.bottom;
+          shieldEl.style.opacity = visible ? "1" : "0";
+        }
+
+        requestAnimationFrame(tick);
+      }
+
+      window.GEHENNA_WS?.on("scan:state", ({ state }) => placeFlashlight(state));
+      requestAnimationFrame(tick);
+    </script>
+  </body>
+</html>
+
